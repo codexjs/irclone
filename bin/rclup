@@ -1,0 +1,81 @@
+#!/bin/bash
+
+if [[ "$1" == "-h" || "$1" == "--help" ]];then
+  printf "Usage: rclup [ORIGIN_PATH] [DESTINATION_PATH] [EXCLUDE]\n\n"
+  printf "  [ORIGIN_PATH] -> The path in your local machine in which you want to listen for changes and uploading it to DESTINATION_PATH.\n\n"
+  printf "  [DESTINATION_PATH] -> The rclone path in which you want to store all the data from ORIGIN_PATH.\n\n"
+  printf "  [EXCLUDE] -> Regular expresion with the files / folders you want to exclude. ex: (.*\.swp|.ssh|.cache)\n\n"
+  printf "This variables can be set eather by input or by environment.\n"
+  exit 0
+fi
+
+if [ -n "$1" ]; then ORIGIN_PATH=$1 ; fi
+
+if [ -n "$2" ]; then DESTINATION_PATH=$2 ; fi
+
+if [ -n "$3" ]; then EXCLUDE=$3 ; fi
+
+if [ -z "$ORIGIN_PATH" ]; then
+  printf -- "\033[31mERROR - ORIGIN_PATH not found\033[0m\n"
+  $0 -h
+  exit 1
+fi
+
+if [ -z "$DESTINATION_PATH" ]; then
+  printf -- "\033[31mERROR - DESTINATION_PATH not found\033[0m\n"
+  $0 -h
+  exit 1
+fi
+
+if [ -z "$EXCLUDE" ]; then
+  printf -- "\033[33mWARNING - EXCLUDE not found... Using default.\033[0m\n"
+  EXCLUDE='(.*\.swp|.ssh|.cache)'
+fi
+
+#Create origin folder if not exist
+mkdir -p $ORIGIN_PATH
+
+printf -- "\033[33mWARNING - If you delete $ORIGIN_PATH all the data in the destination will be deleted and the listener will stop working\033[0m\n"
+printf -- "\033[33mTo avoid folder deletion use 'sudo chattr +i $ORIGIN_PATH'\033[0m\n"
+
+printf -- "\033[36mLooking for exisiting data...\033[0m\n"
+rclone lsf $DESTINATION_PATH &>/dev/null
+if [ $? == "0" ]; then
+  printf -- "\033[36mAdding data to $ORIGIN_PATH\033[0m\n"
+  rclone copy -v --exclude-from /etc/rclup/exclude "$DESTINATION_PATH" "$ORIGIN_PATH"
+else
+  printf -- "\033[36mNothing to add to $ORIGIN_PATH\033[0m\n"
+fi
+
+printf -- "\033[36mSyncing data\033[0m\n"
+rclone sync -v --exclude-from /etc/rclup/exclude  "$ORIGIN_PATH" "$DESTINATION_PATH"
+
+printf -- "\033[36mListening for changes in $ORIGIN_PATH\033[0m\n"
+inotifywait -m -q -r --exclude $EXCLUDE --format '%w%f %e' -e create,attrib,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do
+  status="${data[-1]}"
+  unset data[-1]
+  path="${data[@]}"
+  abs_path=$(echo "${data[@]}" | sed "s|$ORIGIN_PATH||")
+  printf -- "\033[32m$path $status\033[0m\n"
+  case $status in
+  CREATE,ISDIR)
+    rclone mkdir -P "$DESTINATION_PATH$abs_path"
+    ;;
+  ATTRIB | MODIFY)
+    abs_path=$(dirname "$abs_path")
+    rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
+    ;;
+  DELETE)
+    rclone deletefile -v "$DESTINATION_PATH$abs_path"
+    ;;
+  DELETE,ISDIR)
+    rclone purge -P "$DESTINATION_PATH$abs_path"
+    ;;
+  MOVED_FROM | MOVED_FROM,ISDIR)
+    from="$abs_path"
+    ;;
+  MOVED_TO | MOVED_TO,ISDIR)
+    rclone moveto -v "$DESTINATION_PATH$from" "$DESTINATION_PATH$abs_path"
+    ;;
+  esac
+done

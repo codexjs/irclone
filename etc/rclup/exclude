@@ -1,0 +1,8 @@
+node_modules/**
+.ssh/**
+.config/**
+.cache/**
+.local/**
+.oh-my-zsh/**
+.npm/**
+.bash_history

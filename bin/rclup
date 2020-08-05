@@ -29,7 +29,7 @@ fi
 
 if [ -z "$EXCLUDE" ]; then
   printf -- "\033[33mWARNING - EXCLUDE not found... Using default.\033[0m\n"
-  EXCLUDE='(.*\.swp|.ssh|.cache)'
+  EXCLUDE='(.*\.swp|.ssh|.cache|.git)'
 fi
 
 #Create origin folder if not exist

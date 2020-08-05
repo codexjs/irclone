@@ -5,7 +5,7 @@ services:
     image: rclup:latest
     environment:
       - DESTINATION_PATH=gdrive:pi
-      - EXCLUDE=(.*\.swp|.ssh|.cache|node_modules|.config|.local|.oh-my-zsh|.npm|.bash_history.*|.gnupg)
+      - EXCLUDE=(.*\.swp|.ssh|.cache|.git|node_modules|.config|.local|.oh-my-zsh|.npm|.bash_history.*|.gnupg)
     volumes:
       - /home/pi:/backup
       - ~/.config/rclone:/root/.config/rclone

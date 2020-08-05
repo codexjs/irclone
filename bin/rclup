@@ -51,7 +51,7 @@ printf -- "\033[36mSyncing data\033[0m\n"
 rclone sync -v --exclude-from /etc/rclup/exclude  "$ORIGIN_PATH" "$DESTINATION_PATH"
 
 printf -- "\033[36mListening for changes in $ORIGIN_PATH\033[0m\n"
-inotifywait -m -q -r --exclude $EXCLUDE --format '%w%f %e' -e create,attrib,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do
+inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do
   status="${data[-1]}"
   unset data[-1]
   path="${data[@]}"

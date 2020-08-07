@@ -59,23 +59,23 @@ inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modi
   printf -- "\033[32m$path $status\033[0m\n"
   case $status in
   CREATE,ISDIR)
-    rclone mkdir -P "$DESTINATION_PATH$abs_path" &
+    rclone mkdir -P "$DESTINATION_PATH$abs_path"
     ;;
   ATTRIB | MODIFY)
     abs_path=$(dirname "$abs_path")
-    rclone copy -v "$path" "$DESTINATION_PATH$abs_path" &
+    rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
     ;;
   DELETE)
-    rclone deletefile -v "$DESTINATION_PATH$abs_path" &
+    rclone deletefile -v "$DESTINATION_PATH$abs_path"
     ;;
   DELETE,ISDIR)
-    rclone purge -P "$DESTINATION_PATH$abs_path" &
+    rclone purge -P "$DESTINATION_PATH$abs_path"
     ;;
   MOVED_FROM | MOVED_FROM,ISDIR)
     from="$abs_path"
     ;;
   MOVED_TO | MOVED_TO,ISDIR)
-    rclone moveto -v "$DESTINATION_PATH$from" "$DESTINATION_PATH$abs_path" &
+    rclone moveto -v "$DESTINATION_PATH$from" "$DESTINATION_PATH$abs_path"
     ;;
   esac
 done

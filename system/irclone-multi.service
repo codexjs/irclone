@@ -1,11 +1,11 @@
 [Unit]
-Description=Backup Service
+Description=Irclone Multi Service
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Environment=EXCLUDE='(.*\\.swp|.ssh|.cache|node_modules|.config|.local|.oh-my-zsh|.npm|.bash_history)'
-ExecStart=/home/pi/.local/bin/multirclup
+ExecStart=/home/pi/.local/bin/irclone-multi
 Restart=on-failure
 User=pi
 Group=pi

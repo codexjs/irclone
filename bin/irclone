@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [[ "$1" == "-h" || "$1" == "--help" ]];then
-  printf "Usage: rclup [ORIGIN_PATH] [DESTINATION_PATH] [EXCLUDE]\n\n"
+  printf "Usage: irclone [ORIGIN_PATH] [DESTINATION_PATH] [EXCLUDE]\n\n"
   printf "  [ORIGIN_PATH] -> The path in your local machine in which you want to listen for changes and uploading it to DESTINATION_PATH.\n\n"
   printf "  [DESTINATION_PATH] -> The rclone path in which you want to store all the data from ORIGIN_PATH.\n\n"
   printf "  [EXCLUDE] -> Regular expresion with the files / folders you want to exclude. ex: (.*\.swp|.ssh|.cache)\n\n"
@@ -42,13 +42,13 @@ printf -- "\033[36mLooking for exisiting data...\033[0m\n"
 rclone lsf $DESTINATION_PATH &>/dev/null
 if [ $? == "0" ]; then
   printf -- "\033[36mAdding data to $ORIGIN_PATH\033[0m\n"
-  rclone copy -v --exclude-from /etc/rclup/exclude "$DESTINATION_PATH" "$ORIGIN_PATH"
+  rclone copy -v --exclude-from /etc/irclone/exclude "$DESTINATION_PATH" "$ORIGIN_PATH"
 else
   printf -- "\033[36mNothing to add to $ORIGIN_PATH\033[0m\n"
 fi
 
 printf -- "\033[36mSyncing data\033[0m\n"
-rclone sync -v --exclude-from /etc/rclup/exclude  "$ORIGIN_PATH" "$DESTINATION_PATH"
+rclone sync -v --exclude-from /etc/irclone/exclude  "$ORIGIN_PATH" "$DESTINATION_PATH"
 
 printf -- "\033[36mListening for changes in $ORIGIN_PATH\033[0m\n"
 inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do

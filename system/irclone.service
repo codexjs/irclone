@@ -1,5 +1,5 @@
 [Unit] 
-Description=rclup backup service 
+Description=irclone backup service 
 Wants=network-online.target 
 After=network-online.target
 
@@ -7,7 +7,7 @@ After=network-online.target
 Environment=ORIGIN_PATH=/home/pi
 Environment=DESTINATION_PATH=gdrive:pi
 Environment=EXCLUDE='(.*\\.swp|.ssh|.cache|node_modules|.config|.local|.oh-my-zsh|.npm|.bash_history|.gnupg)'
-ExecStart=/usr/bin/rclup
+ExecStart=/usr/bin/irclone
 Restart=on-failure
 User=pi
 Group=pi

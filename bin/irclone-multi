@@ -1,8 +1,8 @@
 #!/bin/bash
 ##Example code
-#rclup [ORIGIN_PATH] [DESTINATION_PATH] $EXCLUDE &
+#irclone [ORIGIN_PATH] [DESTINATION_PATH] $EXCLUDE &
 #P1=$!
-#rclup [ORIGIN_PATH] [DESTINATION_PATH] $EXCLUDE &
+#irclone [ORIGIN_PATH] [DESTINATION_PATH] $EXCLUDE &
 #P2=$!
 ##...
 ##...

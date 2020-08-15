@@ -8,3 +8,4 @@
 .npm/**
 .gnupg/**
 node_modules/**
+*.swp

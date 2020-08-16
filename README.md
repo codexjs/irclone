@@ -17,7 +17,7 @@ So in order to fix this problem I decided to make this script which let me have 
 Irclone is a bash script which use inotify to listen for folder changes and execute a rclone command depending on the inotify response, the operation is simple but it is very useful.
 
 ## Installation
-In order to add this script to your computer you have 2 different options:
+In order to install irclone you have 2 different options:
 - irclone command as a service
 - irclone with Docker
 
@@ -33,24 +33,26 @@ To install irclone with docker the best option and faster in using docker-compos
 #### 1. Clone the repository
 ``` bash
 git clone https://github.com/codexjs/irclone
+cd irclone
 ```
 #### 2. Configuring rclone
-In order to be able to use irclone you have to setup a rclone.conf file, in order to do this with docker you have to use this command.
+To be able to use irclone you have to setup a rclone.conf file, in order to do this with docker you have to use this command.
 ```bash
 docker run -it -v ~/.config/rclone:/config/rclone rclone/rclone config
 ```
-This will execute the rclone config command letting you create the rclone.conf file without having to install rclone in your computer. Checkout rclone docs in order to get more information abaout rclone config https://rclone.org/
+This will execute the rclone config command letting you create the rclone.conf file without having to install rclone in your computer. 
+
+Checkout rclone docs in order to get more information abaout rclone config https://rclone.org/commands/rclone_config/
 
 #### 3. Edit the docker-compose.yml
-In the docker-compose.yml that I have in my repository you probably have to change some things:
-#### environment:
-Here we have 2 environment variables:
+In the docker-compose.yml that you can find in the repository you have to change some things:
+#### environments
 - DESTINATION_PATH: This variable should be which remote you want to use and where you want to store it.
 - EXCLUDE: This variable is going to be used by inotify to don't do anithyng in case matching the extended regular expression.
 > ⚠️ As you can see in the docker-compose file I use $$ instead of  just $ this is becasuse by  using just $ the file will not work correctly ($$==$)
 
 #### volumes:
-The irclone sript is made for listen to /backup folder so you have to add a volume from the folder you want to listen to /backup, In my case I'm going to listen to the /home/pi folder.
+The irclone Dockerfile is made for listen to /backup folder so you have to add a volume from the folder you want to listen to /backup, In my case I'm going to listen to the /home/pi folder.
 ```
 volumes:
     - /home/pi:/backup
@@ -60,7 +62,7 @@ And last but not least you have to make a volume to share the rclone.conf to the
     - ~/.config/rclone:/root/.config/rclone
 ```
 #### 4. Edit the exclude file
-If you look at the proyect structure you can see a folder called etc which contains inside irclone a file called "exclude". This file is going to be used by rclone to exclude files when syncing with the remote.
+If you look at the proyect structure you can see a folder called "etc" which contains inside "irclone" a file called "exclude". This file is going to be used by rclone to exclude files when syncing with the remote.
 
 When the irclone script start the first thing that is going to do is:
 - Pull all the files from the remote and add it to the local system
@@ -68,14 +70,14 @@ When the irclone script start the first thing that is going to do is:
 
 The exclude file is neccessary to exclude all the files that you don't want to be synced to the remote storage.
 
-To know more about exclide with rclone look at the rclone docs https://rclone.org/filtering/
+To know more about excluding with rclone look at the rclone docs https://rclone.org/filtering/
 
 #### 5. Build and start the container
-As I said before right now the image is not uploaded to Docker Hub but this is not going to be a problem since docker-compose will build the image automatically, you just have to run:
+Right now the image is not uploaded to Docker Hub but this is not going to be a problem since docker-compose will build the image automatically, you just have to run:
 ``` bash
 docker-compose up -d
 ```
-After starting check if the script is running correctly by checking docker logs:
+After starting, check if the script is running correctly by checking docker logs:
 ``` bash
 docker-compose logs -f
 ```
@@ -119,18 +121,17 @@ After this the next step to do is to edit and move the "exclude" file to /etc/ir
 sudo mkdir /etc/irclone
 sudo cp etc/irclone/exclude /etc/irclone
 ```
-You can find more information about this file in the step 4 of the irclone with docker installation. 
+You can find more information about this file in the step 4 of the irclone with Docker installation. 
 #### 7. Creating the .service file
 Once you have rclone, inotify-tools installed, rclone configured, irclone added to /usr/bin and the exclude file in /etc/irclone/exclude we have all setup to create the service.
 
 In the repository folder you can find a folder called "system" which contains a irclone.service which is a service example file that you can use as a template.
-#### environment
-In rclone.service file the are 3 environment variables:
+#### environments
 - ORIGIN_PATH: This variable is the folder that you want to watch which will be uploaded to the cloud storage.
 - DESTINATION_PATH:  This variable should be which remote you want to use and where you want to store it.
 - EXCLUDE: This variable is going to be used by inotify to don't do anithyng in case matching the extended regular expression.
 #### User and Group
-This two variables are the User and the Group which is going to execute the command, this user and group must be the user in where you  created the rclone.conf, If you use a user which dont have any rclone.conf file the script is not going to work.
+This two variables are the User and the Group which is going to execute the command, this user and group must be the user in where you created the rclone.conf, If you use a user which dont have any rclone.conf file the script is not going to work.
 
 #### 8. Add and enable the service
 ``` bash
@@ -147,7 +148,7 @@ sudo systemctl status irclone
 If you see "Listening for changes in /backup" that means that the script is running correctly.
 
 #### Multiple irclone services
-If you want to watch to multiple folders using just a service I created a binary in which you can see an example of how to execute multiple irclone commands in just one script. The example is in the bin folder with the name of "irclone-multi".
+If you want to watch to multiple folders using just a service I created a script example in which you can see how to execute multiple irclone commands in just one script. The example is in the bin folder with the name of "irclone-multi".
 
 Also I created a irlcone-multi.service as a example in the system folder.
 

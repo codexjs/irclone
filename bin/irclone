@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [[ "$1" == "-h" || "$1" == "--help" ]];then
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
   printf "Usage: irclone [ORIGIN_PATH] [DESTINATION_PATH] [EXCLUDE]\n\n"
   printf "  [ORIGIN_PATH] -> The path in your local machine in which you want to listen for changes and uploading it to DESTINATION_PATH.\n\n"
   printf "  [DESTINATION_PATH] -> The rclone path in which you want to store all the data from ORIGIN_PATH.\n\n"
@@ -9,11 +9,11 @@ if [[ "$1" == "-h" || "$1" == "--help" ]];then
   exit 0
 fi
 
-if [ -n "$1" ]; then ORIGIN_PATH=$1 ; fi
+if [ -n "$1" ]; then ORIGIN_PATH=$1; fi
 
-if [ -n "$2" ]; then DESTINATION_PATH=$2 ; fi
+if [ -n "$2" ]; then DESTINATION_PATH=$2; fi
 
-if [ -n "$3" ]; then EXCLUDE=$3 ; fi
+if [ -n "$3" ]; then EXCLUDE=$3; fi
 
 if [ -z "$ORIGIN_PATH" ]; then
   printf -- "\033[31mERROR - ORIGIN_PATH not found\033[0m\n"
@@ -48,7 +48,7 @@ else
 fi
 
 printf -- "\033[36mSyncing data\033[0m\n"
-rclone sync -v --exclude-from /etc/irclone/exclude  "$ORIGIN_PATH" "$DESTINATION_PATH"
+rclone sync -v --exclude-from /etc/irclone/exclude "$ORIGIN_PATH" "$DESTINATION_PATH"
 
 printf -- "\033[36mListening for changes in $ORIGIN_PATH\033[0m\n"
 inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do
@@ -66,7 +66,9 @@ inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modi
     rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
     ;;
   DELETE)
-    rclone deletefile -v "$DESTINATION_PATH$abs_path"
+    if [ -d $(dirname $path) ]; then
+      rclone deletefile -v "$DESTINATION_PATH$abs_path"
+    fi
     ;;
   DELETE,ISDIR)
     rclone purge -P "$DESTINATION_PATH$abs_path"

@@ -2,11 +2,13 @@ version: "3"
 services:
   irclone:
     build: .
+    user: 1000:1000
     image: irclone:latest
     environment:
       - DESTINATION_PATH=gdrive:pi
       - EXCLUDE=(\.swp$$|\.bash_history.*$$|\.ssh($$|/)|\.cache($$|/)|\.git($$|/)|\.config($$|/)|\.local($$|/)|\.oh-my-zsh($$|/)|\.npm($$|/)|\.gnupg($$|/)|node_modules($$|/))
+      - RCLONE_CONFIG=/config/rclon.conf
     volumes:
       - /home/pi:/backup
-      - ~/.config/rclone:/root/.config/rclone
+      - ~/.config/rclone:/config
     restart: "unless-stopped"

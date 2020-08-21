@@ -6,8 +6,8 @@ services:
     image: irclone:latest
     environment:
       - DESTINATION_PATH=gdrive:pi
-      - EXCLUDE=(\.swp$$|\.bash_history.*$$|\.ssh($$|/)|\.cache($$|/)|\.git($$|/)|\.config($$|/)|\.local($$|/)|\.oh-my-zsh($$|/)|\.npm($$|/)|\.gnupg($$|/)|node_modules($$|/))
-      - RCLONE_CONFIG=/config/rclon.conf
+      - EXCLUDE=(\.swp$$|\.bash_history.*$$|\.ssh($$|/)|\.cache($$|/)|\.config($$|/)|\.local($$|/)|\.oh-my-zsh($$|/)|\.npm($$|/)|\.gnupg($$|/)|node_modules($$|/))
+      - RCLONE_CONFIG=/config/rclone.conf
     volumes:
       - /home/pi:/backup
       - ~/.config/rclone:/config

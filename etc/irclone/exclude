@@ -1,7 +1,6 @@
 .bash_history
 .ssh/**
 .cache/**
-.git/**
 .config/**
 .local/**
 .oh-my-zsh/**

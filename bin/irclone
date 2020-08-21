@@ -42,7 +42,7 @@ printf -- "\033[36mLooking for exisiting data...\033[0m\n"
 rclone lsf $DESTINATION_PATH &>/dev/null
 if [ $? == "0" ]; then
   printf -- "\033[36mAdding data to $ORIGIN_PATH\033[0m\n"
-  rclone copy -v --exclude-from /etc/irclone/exclude "$DESTINATION_PATH" "$ORIGIN_PATH"
+  rclone copy --create-empty-src-dirs -v --exclude-from /etc/irclone/exclude "$DESTINATION_PATH" "$ORIGIN_PATH"
 else
   printf -- "\033[36mNothing to add to $ORIGIN_PATH\033[0m\n"
 fi
@@ -51,34 +51,63 @@ printf -- "\033[36mSyncing data\033[0m\n"
 rclone sync -v --exclude-from /etc/irclone/exclude "$ORIGIN_PATH" "$DESTINATION_PATH"
 
 printf -- "\033[36mListening for changes in $ORIGIN_PATH\033[0m\n"
+
 inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do
   status="${data[-1]}"
   unset data[-1]
   path="${data[@]}"
   abs_path=$(echo "${data[@]}" | sed "s|$ORIGIN_PATH||")
-  printf -- "\033[32m$path $status\033[0m\n"
+
   case $status in
   CREATE,ISDIR)
-    rclone mkdir -P "$DESTINATION_PATH$abs_path"
+    if [ -d "$path" ]; then
+      printf -- "\033[32m$path $status\033[0m\n"
+      rclone mkdir -P "$DESTINATION_PATH$abs_path"
+    fi
     ;;
-  ATTRIB | MODIFY)
-    abs_path=$(dirname "$abs_path")
-    rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
+  CREATE)
+    if [ -f "$path" ]; then
+      printf -- "\033[32m$path $status\033[0m\n"
+      abs_path=$(dirname "$abs_path")
+      rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
+      created=$path
+    fi
+    ;;
+  ATTRIB)
+    if [ "$path" != "$created" ] && [ -f "$path" ]; then
+      printf -- "\033[32m$path $status\033[0m\n"
+      abs_path=$(dirname "$abs_path")
+      rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
+    fi
+    unset created
+    ;;
+  MODIFY)
+    if [ -f "$path" ]; then
+      printf -- "\033[32m$path $status\033[0m\n"
+      abs_path=$(dirname "$abs_path")
+      rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
+    fi
     ;;
   DELETE)
-    if [ -d $(dirname $path) ]; then
+    if [ -d $(dirname "$path") ]; then
+      printf -- "\033[32m$path $status\033[0m\n"
       rclone deletefile -v "$DESTINATION_PATH$abs_path"
     fi
     ;;
   DELETE,ISDIR)
-    rclone purge -P "$DESTINATION_PATH$abs_path"
+    if [ -d $(dirname "$path") ];then
+      printf -- "\033[32m$path $status\033[0m\n"
+      rclone purge -P "$DESTINATION_PATH$abs_path"
+    fi
     ;;
   MOVED_FROM | MOVED_FROM,ISDIR)
+    printf -- "\033[32m$path $status\033[0m\n"
     from="$abs_path"
     ;;
   MOVED_TO | MOVED_TO,ISDIR)
     rclone moveto -v "$DESTINATION_PATH$from" "$DESTINATION_PATH$abs_path"
     if [ $? != 0 ]; then
+      printf -- "\033[32m$path $status\033[0m\n"
       abs_path=$(dirname "$abs_path")
       rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
     fi

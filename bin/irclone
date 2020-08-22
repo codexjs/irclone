@@ -50,7 +50,27 @@ fi
 printf -- "\033[36mSyncing data\033[0m\n"
 rclone sync -v --exclude-from /etc/irclone/exclude "$ORIGIN_PATH" "$DESTINATION_PATH"
 
+declare -A uploaded
+
+for path in $(find $ORIGIN_PATH); do
+  if [ -f $path ]; then
+    md5=($(md5sum $path))
+    uploaded["$path"]=$md5
+  fi
+done
+
 printf -- "\033[36mListening for changes in $ORIGIN_PATH\033[0m\n"
+
+function create {
+    if [ -f "$path" ]; then
+      printf -- "\033[32m$path $status\033[0m\n"
+      abs_path=$(dirname "$abs_path")
+      rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
+      created=$path
+      md5=($(md5sum $path))
+      uploaded["$path"]=$md5
+    fi
+}
 
 inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do
   status="${data[-1]}"
@@ -66,12 +86,7 @@ inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modi
     fi
     ;;
   CREATE)
-    if [ -f "$path" ]; then
-      printf -- "\033[32m$path $status\033[0m\n"
-      abs_path=$(dirname "$abs_path")
-      rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
-      created=$path
-    fi
+    create
     ;;
   ATTRIB)
     if [ "$path" != "$created" ] && [ -f "$path" ]; then
@@ -82,16 +97,19 @@ inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modi
     unset created
     ;;
   MODIFY)
-    if [ -f "$path" ]; then
+    md5=($(md5sum $path 2> /dev/null))
+    if [ "${uploaded[$path]}" != "$md5" ]; then
       printf -- "\033[32m$path $status\033[0m\n"
       abs_path=$(dirname "$abs_path")
       rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
+      uploaded["$path"]=$md5
     fi
     ;;
   DELETE)
-    if [ -d $(dirname "$path") ]; then
+    if [ -d $(dirname "$path") ] && [ -n "${uploaded[$path]}" ]; then
       printf -- "\033[32m$path $status\033[0m\n"
       rclone deletefile -v "$DESTINATION_PATH$abs_path"
+      unset uploaded["$path"]
     fi
     ;;
   DELETE,ISDIR)
@@ -105,11 +123,10 @@ inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,attrib,modi
     from="$abs_path"
     ;;
   MOVED_TO | MOVED_TO,ISDIR)
-    rclone moveto -v "$DESTINATION_PATH$from" "$DESTINATION_PATH$abs_path"
-    if [ $? != 0 ]; then
-      printf -- "\033[32m$path $status\033[0m\n"
-      abs_path=$(dirname "$abs_path")
-      rclone copy -v "$path" "$DESTINATION_PATH$abs_path"
+    if [ -n "${uploaded[$from]}" ];then
+      rclone moveto -v "$DESTINATION_PATH$from" "$DESTINATION_PATH$abs_path"
+    else
+      create
     fi
     ;;
   esac

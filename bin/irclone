@@ -1,36 +1,35 @@
 #!/bin/bash
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-  printf "Usage: irclone [ORIGIN_PATH] [DESTINATION_PATH] [EXCLUDE]\n\n"
-  printf "  [ORIGIN_PATH] -> The path in your local machine in which you want to listen for changes and uploading it to DESTINATION_PATH.\n\n"
-  printf "  [DESTINATION_PATH] -> The rclone path in which you want to store all the data from ORIGIN_PATH.\n\n"
-  printf "  [EXCLUDE] -> Regular expresion with the files / folders you want to exclude. ex: (.*\.swp|.ssh|.cache)\n\n"
-  printf "This variables can be set eather by input or by environment.\n"
-  exit 0
+    printf "Usage: irclone [ORIGIN_PATH] [DESTINATION_PATH] [EXCLUDE]\n\n"
+    printf "  [ORIGIN_PATH] The path in your local machine in which you want to listen for changes and uploading it to DESTINATION_PATH.\n\n"
+    printf "  [DESTINATION_PATH] The rclone path in which you want to store all the data from ORIGIN_PATH.\n\n"
+    printf "  [EXCLUDE] Regular expresion with the files / folders you want to exclude. ex: (.*\.swp|.ssh|.cache)\n\n"
+    printf "This variables can be set eather by input or by environment.\n"
+    exit 0
 fi
 
-if [ -n "$1" ]; then ORIGIN_PATH=$1; fi
-
-if [ -n "$2" ]; then DESTINATION_PATH=$2; fi
-
-if [ -n "$3" ]; then EXCLUDE=$3; fi
-
+ORIGIN_PATH="${1:-$ORIGIN_PATH}"
 if [ -z "$ORIGIN_PATH" ]; then
-  printf -- "\033[31mERROR - ORIGIN_PATH not found\033[0m\n"
-  $0 -h
-  exit 1
+    printf -- "\033[31mERROR - ORIGIN_PATH not found\033[0m\n"
+    $0 -h
+    exit 1
 fi
 
+DESTINATION_PATH="${2:-$DESTINATION_PATH}"
 if [ -z "$DESTINATION_PATH" ]; then
-  printf -- "\033[31mERROR - DESTINATION_PATH not found\033[0m\n"
-  $0 -h
-  exit 1
+    printf -- "\033[31mERROR - DESTINATION_PATH not found\033[0m\n"
+    $0 -h
+    exit 1
 fi
 
+EXCLUDE="${3:-$EXCLUDE}"
 if [ -z "$EXCLUDE" ]; then
-  printf -- "\033[33mWARNING - EXCLUDE not found... Using default.\033[0m\n"
-  EXCLUDE='(\.swp$|\.ssh($|/)|\.cache($|/)|\.git($|/))'
+    printf -- "\033[33mWARNING - EXCLUDE not found... Using default.\033[0m\n"
+    EXCLUDE='(\.swp$|\.ssh($|/)|\.cache($|/))'
 fi
+
+declare -A dirs
 
 #Create origin folder if not exist
 mkdir -p $ORIGIN_PATH
@@ -38,93 +37,153 @@ mkdir -p $ORIGIN_PATH
 printf -- "\033[33mWARNING - If you delete $ORIGIN_PATH all the data in the destination will be deleted and the listener will stop working\033[0m\n"
 printf -- "\033[33mTo avoid folder deletion use 'sudo chattr +i $ORIGIN_PATH'\033[0m\n"
 
-printf -- "\033[36mLooking for exisiting data...\033[0m\n"
-rclone lsf $DESTINATION_PATH &>/dev/null
-if [ $? == "0" ]; then
-  printf -- "\033[36mAdding data to $ORIGIN_PATH\033[0m\n"
-  rclone copy --create-empty-src-dirs -v --exclude-from /etc/irclone/exclude "$DESTINATION_PATH" "$ORIGIN_PATH"
-else
-  printf -- "\033[36mNothing to add to $ORIGIN_PATH\033[0m\n"
-fi
-
 printf -- "\033[36mSyncing data\033[0m\n"
-rclone sync -v --exclude-from /etc/irclone/exclude "$ORIGIN_PATH" "$DESTINATION_PATH"
+rclone sync -v --create-empty-src-dirs --ignore-checksum --exclude-from /etc/irclone/exclude "$DESTINATION_PATH" "$ORIGIN_PATH"
 
-declare -A uploaded
+function UPDATE_DIR() {
+    dirs[$1]=$(stat -c "%Y" $1 2>/dev/null)
+    dirs[$1]=${dirs[$1]:-0}
+}
 
-for path in $(find $ORIGIN_PATH); do
-  if [ -d $path ]; then
-    uploaded["$path"]=true
-  fi
-  if [ -f $path ]; then
-    md5=($(md5sum $path))
-    uploaded["$path"]=$md5
-  fi
-done
+function DECLARE_DIRS() {
+    for item in $(find $1 -type d); do UPDATE_DIR $item; done
+}
 
-printf -- "\033[36mListening for changes in $ORIGIN_PATH\033[0m\n"
+DECLARE_DIRS $ORIGIN_PATH
 
-function upload {
-    md5=($(md5sum $path 2> /dev/null))
-    if [ "${uploaded[$path]}" != "$md5" ]; then
-      printf -- "\033[32m$path $status\033[0m\n"
-      abs_path=$(dirname "$abs_path")
-      rclone copy -v --no-traverse "$path" "$DESTINATION_PATH$abs_path"
-      uploaded["$path"]=$md5
+function GET_ABS_PATH() {
+    sed "s|^$ORIGIN_PATH||" <<<$1
+}
+
+function CHECK_PARENT_MODTIME() {
+    time_cached=${dirs[$parent]}
+    last_modif=$(stat -c "%Y" $parent)
+    if [ "${last_modif:-0}" -gt "${time_cached:-0}" ]; then return 0; fi
+    return 1
+}
+
+function SYNC_DIR() {
+    printf -- "\033[32m$status - $path\033[0m\n"
+    abs_path=$(GET_ABS_PATH $path)
+    if [ -n "$(ls -A $path)" ]; then
+        DECLARE_DIRS $path
+        if [ "$?" == 0 ]; then
+            rclone sync -v --create-empty-src-dirs --ignore-checksum --exclude-from /etc/irclone/exclude "$path" "$DESTINATION_PATH$abs_path"
+        else dirs[$path]=0; fi
+    else
+        UPDATE_DIR $path
+        rclone mkdir -P "$DESTINATION_PATH$abs_path"
     fi
 }
 
-inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %e" -e create,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do
-  status="${data[-1]}"
-  unset data[-1]
-  path="${data[@]}"
-  abs_path=$(echo "${data[@]}" | sed "s|$ORIGIN_PATH||")
+function MOVE_DIR() {
+    printf -- "\033[32m$status - $path\033[0m\n"
+    UPDATE_DIR $path
+    unset dirs[$from]
+    from_abs_path=$(GET_ABS_PATH $from)
+    abs_path=$(GET_ABS_PATH $path)
+    rclone moveto -v "$DESTINATION_PATH$from_abs_path" "$DESTINATION_PATH$abs_path"
+    rclone sync -v --ignore-checksum --exclude-from "/etc/irclone/exclude" "$path" "$DESTINATION_PATH$abs_path"
+}
 
-  case $status in
-  CREATE,ISDIR)
-    if [ "${uploaded[$path]}" != true ]; then
-      printf -- "\033[32m$path $status\033[0m\n"
-      rclone copy -v --no-traverse "$path" "$DESTINATION_PATH$abs_path"
-      for path in $(find $path); do
-        if [ -d $path ]; then
-          uploaded["$path"]=true
-        fi
-        if [ -f $path ]; then
-          md5=($(md5sum $path))
-          uploaded["$path"]=$md5
-        fi
-      done
-    fi
-    ;;
-  CREATE|MODIFY)
-    upload
-    ;;
-  DELETE)
-    if [ -d $(dirname "$path") ] && [ -n "${uploaded[$path]}" ]; then
-      printf -- "\033[32m$path $status\033[0m\n"
-      rclone deletefile -v --no-traverse "$DESTINATION_PATH$abs_path"
-      unset uploaded["$path"]
-    fi
-    ;;
-  DELETE,ISDIR)
-    if [ -d $(dirname "$path") ] && [ "${uploaded[$path]}" == true ];then
-      printf -- "\033[32m$path $status\033[0m\n"
-      rclone purge -P --no-traverse "$DESTINATION_PATH$abs_path"
-      unset uploaded["$path"]
-    fi
-    ;;
-  MOVED_FROM | MOVED_FROM,ISDIR)
-    from="$path"
-    abs_from="$abs_path"
-    ;;
-  MOVED_TO | MOVED_TO,ISDIR)
-    if [ -n "${uploaded[$from]}" ];then
-      rclone moveto -v --no-traverse "$DESTINATION_PATH$abs_from" "$DESTINATION_PATH$abs_path"
-      uploaded["$path"]=uploaded["$from"]
-      unset uploaded["$from"]
+function DELETE_DIR() {
+    printf -- "\033[32m$status - $1\033[0m\n"
+    abs_path=$(GET_ABS_PATH $1)
+    rclone purge -P "$DESTINATION_PATH$abs_path"
+}
+
+function SYNC_FILES() {
+    printf -- "\033[32mSYNC - $parent\033[0m\n"
+    UPDATE_DIR $parent
+    parent_abs_path=$(GET_ABS_PATH $parent)
+    rclone sync -v --ignore-checksum --exclude-from "/etc/irclone/exclude" --exclude "*/" "$parent" "$DESTINATION_PATH$parent_abs_path"
+}
+
+function COPY_FILE() {
+    printf -- "\033[32m$status - $path\033[0m\n"
+    UPDATE_DIR $parent
+    abs_path=$(GET_ABS_PATH $path)
+    rclone copyto -v --ignore-checksum "$path" "$DESTINATION_PATH$abs_path"
+}
+
+function MOVE_FILES_TO() {
+    if [ "$from_name" != "$name" ]; then
+        printf -- "\033[32mMOVED_FROM - $from\033[0m\n"
+        printf -- "\033[32mMOVED_TO - $path\033[0m\n"
+        UPDATE_DIR $from_parent
+        UPDATE_DIR $parent
+        from_abs_path=$(GET_ABS_PATH $from)
+        abs_path=$(GET_ABS_PATH $path)
+        rclone moveto -v --ignore-checksum "$DESTINATION_PATH$from_abs_path" "$DESTINATION_PATH$abs_path"
     else
-      upload
+        printf -- "\033[32mMOVED_FROM - $from_parent\033[0m\n"
+        #CREATE DIR
+        UPDATE_DIR $from_parent
+        TMP_DESTINATION_PATH="$(cut -d : -f 1 <<<$DESTINATION_PATH):.irclone"
+        # FROM to TMP
+        rclone mkdir "$TMP_DESTINATION_PATH"
+        from_parent_abs_path=$(GET_ABS_PATH $from_parent)
+        rclone move -v --ignore-checksum --exclude-from "/etc/irclone/exclude" --exclude "*/" --exclude-from - "$DESTINATION_PATH$from_parent_abs_path" "$TMP_DESTINATION_PATH" <<<$(ls -1A $from_parent)
+        # TMP to DESTINATION
+        printf -- "\033[32mMOVED_TO - $parent\033[0m\n"
+        UPDATE_DIR $parent
+        parent_abs_path=$(GET_ABS_PATH $parent)
+        rclone move -v --ignore-checksum --exclude-from "/etc/irclone/exclude" "$TMP_DESTINATION_PATH" "$DESTINATION_PATH$parent_abs_path"
+        SYNC_FILES
+        # REMOVE DIR
+        rclone rmdirs "$TMP_DESTINATION_PATH"
     fi
-    ;;
-  esac
+}
+
+function DELETE_FILES() {
+    printf -- "\033[32m$status - $parent\033[0m\n"
+    if [ -n "$(ls -A $parent)" ]; then
+        SYNC_FILES
+    else
+        UPDATE_DIR $parent
+        DELETE_DIR $parent
+        rclone mkdir -P "$DESTINATION_PATH$parent_abs_path"
+    fi
+}
+
+printf -- "\033[36mListening for changes in $ORIGIN_PATH\033[0m\n"
+
+inotifywait -m -q -r --exclude $EXCLUDE --format "%w%f %f %e" -e create,modify,delete,moved_from,moved_to $ORIGIN_PATH | while read -ra data; do
+    path=${data[0]}
+    name=${data[1]}
+    status=${data[2]}
+    parent=$(dirname $path)
+
+    case $status in
+    CREATE,ISDIR)
+        if [ -d "$path" ] && [ -z "${dirs[$path]}" ]; then SYNC_DIR; fi
+        ;;
+    MOVED_FROM,ISDIR)
+        from=$path
+        ;;
+    MOVED_TO,ISDIR)
+        if [ -n "${dirs[$from]}" ]; then MOVE_DIR; elif [ -d "$path" ]; then SYNC_DIR; fi
+        ;;
+    DELETE,ISDIR)
+        if [ -d "$parent" ] && [ -n "${dirs[$path]}" ]; then DELETE_DIR $path; fi
+        unset dirs[$path]
+        ;;
+    CREATE)
+        if [ -f "$path" ] && CHECK_PARENT_MODTIME; then SYNC_FILES; fi
+        ;;
+    MODIFY)
+        if [ -f "$path" ] && CHECK_PARENT_MODTIME; then COPY_FILE; fi
+        ;;
+    MOVED_FROM)
+        from=$path
+        from_parent=$parent
+        from_name=$name
+        ;;
+    MOVED_TO)
+        if [ -f "$path" ] && CHECK_PARENT_MODTIME; then MOVE_FILES_TO; fi
+        ;;
+    DELETE)
+        if [ -d "$parent" ] && CHECK_PARENT_MODTIME; then DELETE_FILES; fi
+        ;;
+    esac
 done

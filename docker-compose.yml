@@ -11,4 +11,5 @@ services:
     volumes:
       - /home/pi:/backup
       - ~/.config/rclone:/config
+      - ~/.cache/rclone:/.cache/rclone
     restart: "unless-stopped"
